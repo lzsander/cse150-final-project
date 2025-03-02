@@ -31,7 +31,9 @@ import os
 import re
 
 
-def gracefulExit():
+def gracefulExit(socket=None):
+    if socket is not None:
+        socket.close()
     sys.stdout.write("Graceful exit...\n")
     sys.exit(0)
 
@@ -42,7 +44,7 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as e:
         print("Error creating socket:%s" %e)
-        return False
+        gracefulExit(clientSocket)
 
     # establish connection to server
     try:
@@ -50,11 +52,11 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
     except socket.gaierror as e:
         print("Address-related error connecting to server:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
     except socket.error as e:
         print("Connection error:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
     # sending data
     try:
@@ -63,7 +65,7 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
     except socket.error as e:
         print("Error sending data:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
 
     # recieve bytes from server (if any)
@@ -72,7 +74,7 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
     except socket.error as e:
         print("Error receiving data:%s"%e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
     if not len(buf):
         print("empty recv")
@@ -80,7 +82,7 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
         sys.stdout.write(buf.decode())
 
     clientSocket.close()
-    return True
+    return 
 
 def attemptBridge(server_ip, server_port, client_id):
 
@@ -89,7 +91,7 @@ def attemptBridge(server_ip, server_port, client_id):
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as e:
         print("Error creating socket:%s" %e)
-        return False
+        gracefulExit(clientSocket)
 
     # establish connection to server
     try:
@@ -97,11 +99,11 @@ def attemptBridge(server_ip, server_port, client_id):
     except socket.gaierror as e:
         print("Address-related error connecting to server:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
     except socket.error as e:
         print("Connection error:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
     # sending data
     try:
@@ -110,7 +112,7 @@ def attemptBridge(server_ip, server_port, client_id):
     except socket.error as e:
         print("Error sending data:%s" %e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
     # recieve bytes from server (if any)
     try:
@@ -118,15 +120,19 @@ def attemptBridge(server_ip, server_port, client_id):
     except socket.error as e:
         print("Error receiving data:%s"%e)
         clientSocket.close()
-        return False
+        gracefulExit(clientSocket)
 
     if not len(buf):
-        print("empty recv")
+        print("Recieved empty message from server...")
     else:
         sys.stdout.write(buf.decode())
+        # parse clientID, IP, port
+        parsed = re.search("BRIDGEACK\\r\\nclientID: (\S+)\\r\\nIP: (\S+)\\r\\nPort: (\S+)\\r\\n\\r\\n",buf.decode())
 
-    return True
-
+        if parsed:
+            return parsed.groups()
+    
+    return None
 
 def main():
 
@@ -190,10 +196,80 @@ def main():
             elif user_input.startswith("/register") and not registered:
                 registered = attemptRegister(server_ip, server_port, "127.0.0.1", client_port, client_id)
             elif user_input.startswith("/bridge"):
-                attemptBridge(server_ip, server_port, client_id) 
+                peer_info = attemptBridge(server_ip, server_port, client_id) 
+                if peer_info:
+                    (peer_name, peer_ip, peer_port) = peer_info
+                    print(f"{peer_name},{peer_ip}:{peer_port}")
+                else:
+                    print("empty bridgeack")
+                break
             else:
                 pass
 
+        # start chat/wait mode
+
+        # if we recieved empty fields for our bridge request, 
+        # then we are the first client and need to wait
+
+        '''if empty client info:
+            # listen, temporarily acting as a server
+            serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            # bind and listen
+            serverSocket.bind(("127.0.0.1",client_port))
+            serverSocket.listen()
+
+            # accept connetions 
+            while True:
+                (clientConnected, clientAddress) = serverSocket.accept()
+
+                # parse the message to ensure correct formatting 
+                dataFromClient = clientConnected.recv(1024).decode()
+
+                sys.stdout.write(f"raw: {dataFromClient}\n")
+
+                sys.stdout.write(f"Incoming chat request from {} {}:{}\n")
+
+
+        # else we got valid client info
+        else:
+            # allow user to initiate /chat and begin chatting
+
+            # wait for /chat command to initiate chat
+            while True:
+                user_input = input()
+                if user_input.startswith("/chat"):
+                    # send initialization message to peer
+                    break
+
+            # connect to other client (as a client in the client-server relationship)
+            clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            clientSocket.connect((str(peer_ip), int(peer_port)))
+
+        # starting in chat mode, alternate between chat/wait
+        chat = 1 # chat==1:chat , chat==0:wait
+        while True: 
+            if chat:
+                outgoing_message = input()
+
+                # check a quit message
+                if (outgoing_message.startswith("/quit")):
+                    # send quit message and close connection/socket
+
+                clientSocket.send(outgoing_message.encode())
+                
+                # switch back to listen
+                chat = 0 
+
+            else:
+                incoming_message = clientSocket.recv(1024).decode()
+
+                # check if the message is a quit
+                if quit message:
+                    # quit
+
+                chat = 1'''
+                
     except KeyboardInterrupt:
         return
 
