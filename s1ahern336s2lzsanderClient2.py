@@ -1,6 +1,6 @@
 
 '''
-By Lucais Sanderson
+By Lucais Sanderson & Antonio Hernandez Ruiz
 
 Citations:
 
@@ -13,6 +13,11 @@ Citations:
     socket programming:
         https://pythontic.com/modules/socket/send
         https://www.geeksforgeeks.org/socket-programming-python/#
+
+
+
+
+feel free to change any of this...
 '''
 
 
