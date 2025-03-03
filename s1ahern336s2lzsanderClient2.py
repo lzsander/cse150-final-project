@@ -14,6 +14,9 @@ Citations:
         https://pythontic.com/modules/socket/send
         https://www.geeksforgeeks.org/socket-programming-python/#
 
+    select() tutorial:
+        I used the example from the part1 slides in section
+
 
 
 
