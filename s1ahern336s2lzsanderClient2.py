@@ -215,9 +215,9 @@ def main():
                 peer_info = attemptBridge(server_ip, server_port, client_id) 
                 if peer_info:
                     (peer_name, peer_ip, peer_port) = peer_info
-                    print(f"{peer_name},{peer_ip}:{peer_port}")
-                else:
-                    print("empty bridgeack")
+                #    print(f"{peer_name},{peer_ip}:{peer_port}")
+                #else:
+                #    print("empty bridgeack")
                 break
             else:
                 pass
@@ -332,7 +332,7 @@ def main():
                             # received FIN message
                             data = chatSocket.recv(2048)
                             if not data:
-                                sys.stdout.write(f"{peer_name} closed the connection")
+                                sys.stdout.write(f"{peer_name} closed the connection\n")
                                 gracefulExit()
                         elif s == sys.stdin:
                             outgoing_message = input()
