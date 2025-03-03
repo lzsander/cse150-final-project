@@ -14,6 +14,9 @@ Citations:
         https://pythontic.com/modules/socket/send
         https://www.geeksforgeeks.org/socket-programming-python/#
 
+    select() tutorial:
+        I used the example from the part1 slides in section
+
 
 
 
@@ -34,7 +37,7 @@ import re
 def gracefulExit(socket=None):
     if socket is not None:
         socket.close()
-    sys.stdout.write("Graceful exit...\n")
+    sys.stdout.write("Exiting program\n")
     sys.exit(0)
 
 def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
@@ -43,18 +46,18 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
     try:
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as e:
-        print("Error creating socket:%s" %e)
+        sys.stderr.write(f"Error creating socket: {e}\n")
         gracefulExit(clientSocket)
 
     # establish connection to server
     try:
         clientSocket.connect((server_ip,server_port))
     except socket.gaierror as e:
-        print("Address-related error connecting to server:%s" %e)
+        sys.stderr.write("Address-related error connecting to server:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
     except socket.error as e:
-        print("Connection error:%s" %e)
+        sys.stderr.write("Connection error:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
@@ -63,7 +66,7 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
         register_message = f"REGISTER\r\nclientID: {client_id}\r\nIP: {client_ip}\r\nPort: {client_port}\r\n\r\n"
         clientSocket.send(register_message.encode())
     except socket.error as e:
-        print("Error sending data:%s" %e)
+        sys.stderr.write("Error sending data:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
@@ -72,14 +75,15 @@ def attemptRegister(server_ip, server_port, client_ip, client_port, client_id):
     try:
         buf = clientSocket.recv(2048)
     except socket.error as e:
-        print("Error receiving data:%s"%e)
+        sys.stderr.write("Error receiving data:%s\n"%e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
     if not len(buf):
-        print("empty recv")
+        sys.stdout.write("Recieved empty message from server...\n")
     else:
-        sys.stdout.write(buf.decode())
+        pass
+        #sys.stdout.write(buf.decode())
 
     clientSocket.close()
     return 
@@ -90,18 +94,18 @@ def attemptBridge(server_ip, server_port, client_id):
     try:
         clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as e:
-        print("Error creating socket:%s" %e)
+        sys.stderr.write("Error creating socket:%s\n" %e)
         gracefulExit(clientSocket)
 
     # establish connection to server
     try:
         clientSocket.connect((server_ip,server_port))
     except socket.gaierror as e:
-        print("Address-related error connecting to server:%s" %e)
+        sys.stderr.write("Address-related error connecting to server:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
     except socket.error as e:
-        print("Connection error:%s" %e)
+        sys.stderr.write("Connection error:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
@@ -110,7 +114,7 @@ def attemptBridge(server_ip, server_port, client_id):
         bridge_message = f"BRIDGE\r\nclientID: {client_id}\r\n\r\n"
         clientSocket.send(bridge_message.encode())
     except socket.error as e:
-        print("Error sending data:%s" %e)
+        sys.stderr.write("Error sending data:%s\n" %e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
@@ -118,20 +122,21 @@ def attemptBridge(server_ip, server_port, client_id):
     try:
         buf = clientSocket.recv(2048)
     except socket.error as e:
-        print("Error receiving data:%s"%e)
+        sys.stderr.write("Error receiving data:%s\n"%e)
         clientSocket.close()
         gracefulExit(clientSocket)
 
     if not len(buf):
         print("Recieved empty message from server...")
     else:
-        sys.stdout.write(buf.decode())
+        #sys.stdout.write(buf.decode())
         # parse clientID, IP, port
         parsed = re.search("BRIDGEACK\\r\\nclientID: (\S+)\\r\\nIP: (\S+)\\r\\nPort: (\S+)\\r\\n\\r\\n",buf.decode())
 
         if parsed:
             return parsed.groups()
     
+    clientSocket.close()
     return None
 
 def main():
@@ -144,7 +149,7 @@ def main():
         try:
             chatSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         except socket.error as e:
-            print("Error creating socket:%s" %e)
+            sys.stderr.write("Error creating socket:%s\n" %e)
             gracefulExit(chatSocket)
 
         # chat mode flag
@@ -284,6 +289,12 @@ def main():
                 if user_input.startswith("/chat"):
                     # send initialization message to peer
                     break
+                elif user_input.startswith("/quit"):
+                    gracefullyExit(chatSocket)
+                else:
+                    pass
+
+            sys.stdout.write("IN CHAT MODE\n")
 
             # connect to other client (as a client in the client-server relationship)
             try:
@@ -302,15 +313,36 @@ def main():
             try:
                 chatSocket.send(init_message.encode())
             except socket.error as e:
-                sys.stderr.write(f"Error sending message: {e}")
+                sys.stderr.write(f"Error sending message: {e}\n")
                 gracefulExit(clientSocket)
-
 
         # starting in chat mode, alternate between chat/wait
         # chat==1:chat , chat==0:wait
         while True: 
+            should_exit = False
+
             if chat:
-                outgoing_message = input()
+                # multiplex between chat socket and stdin
+                while True:
+                    # monitor chat socket and stdin (user input)
+                    readable, writable, exceptional = select.select([chatSocket,sys.stdin],[],[])
+
+                    for s in readable:
+                        if s == chatSocket:
+                            # received FIN message
+                            data = chatSocket.recv(2048)
+                            if not data:
+                                sys.stdout.write(f"{peer_name} closed the connection")
+                                gracefulExit()
+                        elif s == sys.stdin:
+                            outgoing_message = input()
+                            if outgoing_message:
+                                should_exit = True
+                                break
+                    if should_exit:
+                        break
+
+
 
                 # check a quit message
                 if (outgoing_message.startswith("/quit")):
@@ -321,6 +353,8 @@ def main():
                         chatSocket.send(quit_message.encode())
                     except socket.error as e:
                         sys.stderr.write(f"Error sending quit message: {e}\n")
+
+                    sys.stdout.write("Chat session ended\n")
 
                     gracefulExit(chatSocket)
 
@@ -338,9 +372,17 @@ def main():
 
             else:
                 # capture incoming message
-                incoming_message = chatSocket.recv(2048).decode()
+                buf = chatSocket.recv(2048)
 
-                sys.stdout.write(f"raw msg: {incoming_message}")
+                # check if we got a FIN
+                if not buf:
+                    chatSocket.close()
+                    gracefulExit()
+
+                incoming_message = buf.decode()
+
+
+                #sys.stdout.write(f"raw msg: {incoming_message}\n")
 
                 # CHAT\r\nType: init\r\nclientID: {name}\r\nIP: {ip}\r\nPort: {port}\r\n\r\n
                 is_initial = re.search("CHAT\r\nType: init\r\nclientID: (\S+)\r\nIP: (\S+)\r\nPort: (\S+)\r\n\r\n", incoming_message)
@@ -358,6 +400,7 @@ def main():
                     sys.stdout.write(f"Incoming chat request from {peer_name} {peer_ip}:{peer_port}\n")
                 # check if the message is a quit
                 elif is_quit:
+                    sys.stdout.write(f"{peer_name} has ended the chat session\n")
                     gracefulExit(chatSocket)
                 # check if its a chat message
                 elif is_msg:
@@ -369,8 +412,14 @@ def main():
 
     except KeyboardInterrupt:
         if chat:
-            # send the peer quit message if we're in chat mode
-            pass
+            # send quit message and close connection/socket
+            quit_message = "CHAT\r\nType: quit\r\n\r\n"
+
+            try:
+                chatSocket.send(quit_message.encode())
+            except socket.error as e:
+                sys.stderr.write(f"Error sending quit message: {e}\n")
+
         gracefulExit(chatSocket)
 
    
